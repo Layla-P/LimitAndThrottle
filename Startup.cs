@@ -11,6 +11,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using AspNetCoreRateLimit;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Http;
 
 namespace LimitAndThrottle
 {
@@ -23,25 +25,30 @@ namespace LimitAndThrottle
 
         public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
             // needed to load configuration from appsettings.json
             services.AddOptions();
 
             // needed to store rate limit counters and ip rules
+            // middleware by Stefan Prodan
             services.AddMemoryCache();
             services.Configure<IpRateLimitOptions>(Configuration.GetSection("IpRateLimiting"));
-           
+
             // inject counter and rules stores
             services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
             services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
+            services.AddAntiforgery(options => options.HeaderName = "X-XSRF-TOKEN");
 
-             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
+
+            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
+            
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, 
+                                IAntiforgery antiforgery,
+                                IHostingEnvironment env)
         {
             if (env.IsDevelopment())
             {
@@ -52,7 +59,8 @@ namespace LimitAndThrottle
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
+            app.UseIpRateLimiting();
+           
             app.UseMvc();
         }
     }
